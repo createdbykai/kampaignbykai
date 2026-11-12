@@ -1,36 +1,52 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ImagePlus, Pencil, Plus, Sparkles, Trash2, WandSparkles, X } from "lucide-react";
 import { BlobPreview } from "@/components/asset-preview";
 import { ImageModelSelector } from "@/components/image-model-selector";
 import { database } from "@/lib/database";
+import {
+  campaignImageFormats,
+  isCampaignImageFormat,
+  type CampaignImageFormat,
+} from "@/lib/image-options";
+import { pollinationsImageModels } from "@/lib/pollinations-image-models";
 import type { Brand, BrandContext } from "@/lib/types";
 
-const logoStyles = ["Graffiti", "Vintage", "Minimal", "Hand-drawn"];
+async function getWorkspaceBrands(workspaceId: string) {
+  const brands = await database.brands.where("workspaceId").equals(workspaceId).toArray();
+  return brands.sort((a, b) => b.updatedAt - a.updatedAt);
+}
 
-export function BrandManager() {
+export function BrandManager({ workspaceId }: { workspaceId: string }) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [editing, setEditing] = useState<Brand | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [generatingLogoId, setGeneratingLogoId] = useState("");
-  const [logoModel, setLogoModel] = useState("google/gemini-nano-banana-2.1");
+  const logoModel = "google/gemini-nano-banana-2.1";
 
   useEffect(() => {
-    void database.brands
-      .orderBy("updatedAt")
-      .reverse()
-      .toArray()
-      .then(setBrands)
-      .catch(() => setError("Your brands could not be loaded. Please try again."))
-      .finally(() => setIsLoading(false));
-  }, []);
+    let active = true;
+    void getWorkspaceBrands(workspaceId)
+      .then((savedBrands) => {
+        if (active) setBrands(savedBrands);
+      })
+      .catch(() => {
+        if (active) setError("Your brands could not be loaded. Please try again.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspaceId]);
 
   async function saveBrand(brand: Brand): Promise<boolean> {
     try {
-      await database.brands.put(brand);
-      setBrands(await database.brands.orderBy("updatedAt").reverse().toArray());
+      await database.brands.put({ ...brand, workspaceId });
+      setBrands(await getWorkspaceBrands(workspaceId));
       setEditing(undefined);
       setError("");
       return true;
@@ -46,11 +62,13 @@ export function BrandManager() {
     }
     try {
       await database.transaction("rw", database.brands, database.campaigns, database.assets, async () => {
-        await database.assets.where("brandId").equals(brand.id).delete();
-        await database.campaigns.where("brandId").equals(brand.id).delete();
+        await database.assets.where("workspaceId").equals(workspaceId)
+          .filter((asset) => asset.brandId === brand.id).delete();
+        await database.campaigns.where("workspaceId").equals(workspaceId)
+          .filter((campaign) => campaign.brandId === brand.id).delete();
         await database.brands.delete(brand.id);
       });
-      setBrands(await database.brands.orderBy("updatedAt").reverse().toArray());
+      setBrands(await getWorkspaceBrands(workspaceId));
       setError("");
     } catch {
       setError("The brand could not be deleted. Please try again.");
@@ -79,7 +97,7 @@ export function BrandManager() {
           purpose: "logo",
           brand: brandContext,
           logoPrompt: brand.logoPrompt,
-          logoStyle: brand.logoStyle,
+          format: brand.logoFormat ?? "square",
           model: logoModel,
         }),
       });
@@ -96,9 +114,9 @@ export function BrandManager() {
         throw new Error(message);
       }
       const logo = await response.blob();
-      const updatedBrand = { ...brand, logo };
+      const updatedBrand = { ...brand, logo, logoFormat: brand.logoFormat ?? "square" };
       await database.brands.put(updatedBrand);
-      setBrands(await database.brands.orderBy("updatedAt").reverse().toArray());
+      setBrands(await getWorkspaceBrands(workspaceId));
     } catch (generationError) {
       setError(
         generationError instanceof Error
@@ -132,14 +150,6 @@ export function BrandManager() {
           <div className="eyebrow">YOUR BRANDS</div>
           <h2>{brands.length} {brands.length === 1 ? "brand" : "brands"} in your studio</h2>
         </div>
-        <div className="brand-logo-model">
-          <ImageModelSelector
-            disabled={Boolean(generatingLogoId)}
-            onChange={setLogoModel}
-            value={logoModel}
-          />
-          <span>Recommended for logos: Nano Banana 2.0, 2.1, Pro, and GPT Image models.</span>
-        </div>
       </div>
 
       {error && <p className="form-message form-error" role="alert">{error}</p>}
@@ -155,7 +165,7 @@ export function BrandManager() {
                 {brand.logo ? (
                   <BlobPreview
                     blob={brand.logo}
-                    className={`brand-card-logo${brand.logoFormat ? ` asset-preview-${brand.logoFormat}` : ""}`}
+                    className="brand-card-logo"
                     label={`${brand.name} logo`}
                   />
                 ) : (
@@ -219,6 +229,7 @@ export function BrandManager() {
           brand={editing}
           onClose={() => setEditing(undefined)}
           onSave={saveBrand}
+          workspaceId={workspaceId}
         />
       )}
     </div>
@@ -229,13 +240,26 @@ function BrandForm({
   brand,
   onClose,
   onSave,
+  workspaceId,
 }: {
   brand: Brand | null;
   onClose: () => void;
   onSave: (brand: Brand) => Promise<boolean>;
+  workspaceId: string;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
   const [createLogo, setCreateLogo] = useState(brand?.createLogo ?? false);
   const [logoPreview, setLogoPreview] = useState("");
+  const [generatedLogo, setGeneratedLogo] = useState<{
+    blob: Blob;
+    format: CampaignImageFormat;
+  }>();
+  const [logoFormat, setLogoFormat] = useState<CampaignImageFormat>(brand?.logoFormat ?? "square");
+  const [logoModel, setLogoModel] = useState(pollinationsImageModels[0].name);
+  const [isGeneratingLogo, setIsGeneratingLogo] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const [logoSuccess, setLogoSuccess] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [brandName, setBrandName] = useState(brand?.name ?? "");
@@ -252,18 +276,20 @@ function BrandForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isGeneratingLogo) return;
     const values = new FormData(event.currentTarget);
     const uploadedLogo = values.get("logo");
     const file = uploadedLogo instanceof File && uploadedLogo.size > 0 ? uploadedLogo : undefined;
     setIsSaving(true);
     const saved = await onSave({
       id: brand?.id ?? crypto.randomUUID(),
+      workspaceId,
       name: String(values.get("name") ?? "").trim(),
       secondaryName: String(values.get("secondaryName") ?? "").trim(),
       slogan: String(values.get("slogan") ?? "").trim(),
       description: String(values.get("description") ?? "").trim(),
-      logo: file ?? brand?.logo,
-      logoFormat: file ? undefined : brand?.logoFormat,
+      logo: file ?? generatedLogo?.blob ?? brand?.logo,
+      logoFormat: file ? undefined : generatedLogo?.format ?? brand?.logoFormat,
       website: String(values.get("website") ?? "").trim(),
       socialMedia: String(values.get("socialMedia") ?? "").trim(),
       category: String(values.get("category") ?? ""),
@@ -273,12 +299,84 @@ function BrandForm({
       inspirations: String(values.get("inspirations") ?? "").trim(),
       createLogo,
       logoPrompt: String(values.get("logoPrompt") ?? "").trim(),
-      logoStyle: String(values.get("logoStyle") ?? ""),
+      logoStyle: brand?.logoStyle ?? "",
       updatedAt: Date.now(),
     });
     if (!saved) {
       setFormError("Your brand could not be saved. Please check the form and try again.");
       setIsSaving(false);
+    }
+  }
+
+  async function generateLogo() {
+    const form = formRef.current;
+    if (!form) return;
+
+    const values = new FormData(form);
+    const value = (name: string) => String(values.get(name) ?? "").trim();
+    const name = value("name");
+    const logoPrompt = value("logoPrompt");
+    if (!name) {
+      setLogoError("Add a brand name before generating its logo.");
+      return;
+    }
+    if (!logoPrompt) {
+      setLogoError("Describe the logo you want to create.");
+      return;
+    }
+
+    const brandContext: BrandContext = {
+      name,
+      secondaryName: value("secondaryName"),
+      slogan: value("slogan"),
+      description: value("description"),
+      category: value("category"),
+      targetAudience: value("targetAudience"),
+      personality: value("personality"),
+      positioning: value("positioning"),
+      inspirations: value("inspirations"),
+    };
+
+    setIsGeneratingLogo(true);
+    setLogoError("");
+    setLogoSuccess("");
+    try {
+      const response = await fetch("/api/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: "logo",
+          brand: brandContext,
+          logoPrompt,
+          format: logoFormat,
+          model: logoModel,
+        }),
+      });
+      if (!response.ok) {
+        const result: unknown = await response.json().catch(() => null);
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "error" in result &&
+          typeof result.error === "string"
+            ? result.error
+            : "Your logo could not be generated. Please try again.";
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      setGeneratedLogo({ blob, format: logoFormat });
+      setLogoPreview("");
+      if (logoFileInputRef.current) logoFileInputRef.current.value = "";
+      setLogoSuccess("Logo generated. Save the brand to keep it.");
+    } catch (generationError) {
+      setLogoError(
+        generationError instanceof Error
+          ? generationError.message
+          : "Your logo could not be generated. Please try again.",
+      );
+    } finally {
+      setIsGeneratingLogo(false);
     }
   }
 
@@ -347,7 +445,7 @@ function BrandForm({
             <X aria-hidden="true" size={18} />
           </button>
         </div>
-        <form className="brand-form" onSubmit={(event) => void handleSubmit(event)}>
+        <form className="brand-form" onSubmit={(event) => void handleSubmit(event)} ref={formRef}>
           <div className="form-grid">
             <label>
               Brand name <span className="required-mark">*</span>
@@ -429,11 +527,19 @@ function BrandForm({
           </div>
 
           <div className="logo-upload-row">
-            {brand?.logo && !logoPreview ? (
+            {logoPreview ? (
+              <div className="logo-preview" role="img" aria-label="Brand logo preview" style={{ backgroundImage: `url("${logoPreview}")` }} />
+            ) : generatedLogo ? (
+              <BlobPreview
+                blob={generatedLogo.blob}
+                className={`brand-form-logo asset-preview-${generatedLogo.format}`}
+                label="Generated brand logo preview"
+              />
+            ) : brand?.logo ? (
               <BlobPreview blob={brand.logo} className="brand-form-logo" label="Brand logo preview" />
             ) : (
-              <div className="logo-preview" role="img" aria-label="Brand logo preview" style={logoPreview ? { backgroundImage: `url("${logoPreview}")` } : undefined}>
-                {!logoPreview && <ImagePlus aria-hidden="true" size={21} />}
+              <div className="logo-preview" role="img" aria-label="Brand logo preview">
+                <ImagePlus aria-hidden="true" size={21} />
               </div>
             )}
             <div className="logo-upload-copy">
@@ -444,9 +550,14 @@ function BrandForm({
                 <input
                   accept="image/*"
                   name="logo"
+                  ref={logoFileInputRef}
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
-                    if (file) setLogoPreview(URL.createObjectURL(file));
+                    if (file) {
+                      setGeneratedLogo(undefined);
+                      setLogoPreview(URL.createObjectURL(file));
+                      setLogoSuccess("");
+                    }
                   }}
                   type="file"
                 />
@@ -455,33 +566,81 @@ function BrandForm({
           </div>
 
           <label className="checkbox-row">
-            <input checked={createLogo} onChange={(event) => setCreateLogo(event.target.checked)} type="checkbox" />
+            <input
+              checked={createLogo}
+              onChange={(event) => {
+                setCreateLogo(event.target.checked);
+                if (!event.target.checked) {
+                  setGeneratedLogo(undefined);
+                  setLogoError("");
+                  setLogoSuccess("");
+                }
+              }}
+              type="checkbox"
+            />
             <span className="custom-checkbox" />
-            <span><strong>I don&apos;t have a logo. Create one for me.</strong><small>Choose a direction and prompt; you can generate it later.</small></span>
+            <span><strong>I don&apos;t have a logo. Create one for me.</strong><small>Choose a model, format, and prompt to generate one now.</small></span>
           </label>
 
           {createLogo && (
             <div className="logo-generator-fields">
               <label>
-                Logo generation prompt
-                <textarea defaultValue={brand?.logoPrompt} name="logoPrompt" placeholder="Describe the logo you imagine, including any text or symbols." rows={2} />
+                Logo prompt
+                <textarea
+                  defaultValue={brand?.logoPrompt}
+                  disabled={isGeneratingLogo}
+                  maxLength={1200}
+                  name="logoPrompt"
+                  onChange={() => {
+                    setGeneratedLogo(undefined);
+                    setLogoSuccess("");
+                  }}
+                  placeholder="Describe the logo, lettering, colors, and visual details you want."
+                  rows={3}
+                />
               </label>
-              <fieldset>
-                <legend>Logo style</legend>
-                <div className="logo-style-options">
-                  {logoStyles.map((style) => (
-                    <label className="logo-style-option" key={style}>
-                      <input
-                        defaultChecked={brand?.logoStyle === style || (!brand?.logoStyle && style === logoStyles[0])}
-                        name="logoStyle"
-                        type="radio"
-                        value={style}
-                      />
-                      <span>{style}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <div className="logo-generation-options">
+                <ImageModelSelector
+                  disabled={isGeneratingLogo}
+                  onChange={(model) => {
+                    setLogoModel(model);
+                    setGeneratedLogo(undefined);
+                    setLogoSuccess("");
+                  }}
+                  value={logoModel}
+                />
+                <label>
+                  Image format
+                  <select
+                    disabled={isGeneratingLogo}
+                    onChange={(event) => {
+                      if (isCampaignImageFormat(event.target.value)) {
+                        setLogoFormat(event.target.value);
+                        setGeneratedLogo(undefined);
+                        setLogoSuccess("");
+                      }
+                    }}
+                    value={logoFormat}
+                  >
+                    {campaignImageFormats.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label} · {item.detail.split(" · ")[0]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button
+                className="primary-button"
+                disabled={isGeneratingLogo || isSaving}
+                onClick={() => void generateLogo()}
+                type="button"
+              >
+                <Sparkles aria-hidden="true" size={15} />
+                {isGeneratingLogo ? "Generating…" : generatedLogo ? "Regenerate logo" : "Generate logo"}
+              </button>
+              {logoError && <p className="form-message form-error" role="alert">{logoError}</p>}
+              {logoSuccess && <p className="form-message form-success" role="status">{logoSuccess}</p>}
             </div>
           )}
 
@@ -489,7 +648,7 @@ function BrandForm({
 
           <div className="modal-footer">
             <button className="subtle-button" onClick={onClose} type="button">Cancel</button>
-            <button className="primary-button" disabled={isSaving} type="submit">
+            <button className="primary-button" disabled={isSaving || isGeneratingLogo} type="submit">
               {isSaving ? "Saving…" : brand ? "Save changes" : "Save brand"}
             </button>
           </div>

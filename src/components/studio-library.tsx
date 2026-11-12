@@ -38,11 +38,13 @@ const templateImages = [
 
 export function StudioLibrary({
   page,
+  workspaceId,
   onOpenCampaign,
   onOpenBrand,
   onUseTemplate,
 }: {
   page: LibraryPage;
+  workspaceId: string;
   onOpenCampaign: (campaign: Campaign) => void;
   onOpenBrand: () => void;
   onUseTemplate: (template: CampaignTemplate) => void;
@@ -68,7 +70,9 @@ export function StudioLibrary({
     try {
       if (asset.kind === "logo") {
         const brand = await database.brands.get(asset.brandId);
-        if (!brand) throw new Error("The brand linked to this logo could not be found.");
+        if (!brand || brand.workspaceId !== workspaceId) {
+          throw new Error("The brand linked to this logo could not be found.");
+        }
         await database.brands.put({ ...brand, logo: undefined, logoFormat: undefined, updatedAt: Date.now() });
         setBrands((current) => current.map((item) =>
           item.id === brand.id ? { ...item, logo: undefined, logoFormat: undefined, updatedAt: Date.now() } : item,
@@ -104,13 +108,15 @@ export function StudioLibrary({
     async function loadLibrary() {
       if (page === "My Campaigns") {
         const [savedCampaigns, savedBrands] = await Promise.all([
-          database.campaigns.orderBy("createdAt").reverse().toArray(),
-          database.brands.toArray(),
+          database.campaigns.where("workspaceId").equals(workspaceId).toArray(),
+          database.brands.where("workspaceId").equals(workspaceId).toArray(),
         ]);
+        savedCampaigns.sort((a, b) => b.createdAt - a.createdAt);
         const campaignAssets = await Promise.all(
           savedCampaigns.map(async (campaign) => [
             campaign.id,
-            await database.assets.where("campaignId").equals(campaign.id).toArray(),
+            await database.assets.where("workspaceId").equals(workspaceId)
+              .filter((asset) => asset.campaignId === campaign.id).toArray(),
           ] as const),
         );
         if (!active) return;
@@ -135,10 +141,11 @@ export function StudioLibrary({
       }
 
       const [savedAssets, savedCampaigns, savedBrands] = await Promise.all([
-        database.assets.orderBy("createdAt").reverse().toArray(),
-        database.campaigns.toArray(),
-        database.brands.toArray(),
+        database.assets.where("workspaceId").equals(workspaceId).toArray(),
+        database.campaigns.where("workspaceId").equals(workspaceId).toArray(),
+        database.brands.where("workspaceId").equals(workspaceId).toArray(),
       ]);
+      savedAssets.sort((a, b) => b.createdAt - a.createdAt);
       const campaignNames = new Map(savedCampaigns.map((campaign) => [campaign.id, campaign.brief.name]));
       const brandNames = new Map(savedBrands.map((brand) => [brand.id, brand.name]));
       if (!active) return;
@@ -158,6 +165,7 @@ export function StudioLibrary({
         .filter((brand): brand is Brand & { logo: Blob } => Boolean(brand.logo))
         .map((brand) => ({
           id: `logo-${brand.id}`,
+          workspaceId: brand.workspaceId,
           brandId: brand.id,
           blob: brand.logo,
           prompt: brand.logoPrompt,
@@ -181,7 +189,7 @@ export function StudioLibrary({
     return () => {
       active = false;
     };
-  }, [page]);
+  }, [page, workspaceId]);
 
   async function deleteCampaign(campaign: Campaign) {
     if (!window.confirm(`Delete “${campaign.brief.name}” and its saved images? This cannot be undone.`)) {
@@ -189,7 +197,8 @@ export function StudioLibrary({
     }
     try {
       await database.transaction("rw", database.campaigns, database.assets, async () => {
-        await database.assets.where("campaignId").equals(campaign.id).delete();
+        await database.assets.where("workspaceId").equals(workspaceId)
+          .filter((asset) => asset.campaignId === campaign.id).delete();
         await database.campaigns.delete(campaign.id);
       });
       setCampaigns((current) => current.filter((item) => item.id !== campaign.id));

@@ -65,10 +65,12 @@ export function CampaignBuilder({
   onCreateBrand,
   onCreated,
   template,
+  workspaceId,
 }: {
   onCreateBrand: () => void;
   onCreated: (campaign: Campaign) => void;
   template?: CampaignTemplate | null;
+  workspaceId: string;
 }) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandId, setBrandId] = useState("");
@@ -84,16 +86,17 @@ export function CampaignBuilder({
 
   useEffect(() => {
     void database.brands
-      .orderBy("updatedAt")
-      .reverse()
+      .where("workspaceId")
+      .equals(workspaceId)
       .toArray()
       .then((savedBrands) => {
-        setBrands(savedBrands);
-        setBrandId(savedBrands[0]?.id ?? "");
+        const sortedBrands = savedBrands.sort((a, b) => b.updatedAt - a.updatedAt);
+        setBrands(sortedBrands);
+        setBrandId(sortedBrands[0]?.id ?? "");
       })
       .catch(() => setError("Your brands could not be loaded. Please try again."))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [workspaceId]);
 
   const selectedBrand = brands.find((brand) => brand.id === brandId);
 
@@ -163,6 +166,7 @@ export function CampaignBuilder({
       const now = Date.now();
       const campaign: Campaign = {
         id: crypto.randomUUID(),
+        workspaceId,
         brandId: selectedBrand.id,
         brief,
         strategy: result.strategy,

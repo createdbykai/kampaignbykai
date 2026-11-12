@@ -49,6 +49,10 @@ body {
   min-height: 100%;
 }
 
+html {
+  zoom: 1.04;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -129,8 +133,13 @@ a:focus-visible {
   font-size: 13px;
 }
 
+.workspace-switcher-container {
+  position: relative;
+}
+
 .workspace-switcher {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
   min-height: 57px;
@@ -138,6 +147,15 @@ a:focus-visible {
   border: 1px solid #44423d;
   border-radius: 9px;
   background: #2e2d29;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.workspace-switcher:hover,
+.workspace-switcher[aria-expanded="true"] {
+  border-color: #e8c1a8;
+  background: #fffaf5;
 }
 
 .workspace-avatar,
@@ -191,6 +209,149 @@ a:focus-visible {
 
 .workspace-switcher > svg {
   color: #a4a198;
+}
+
+.workspace-switcher-container .workspace-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(270px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid #f0d7c2;
+  border-radius: 8px;
+  background: #fffefa;
+  box-shadow: 0 14px 36px rgb(70 43 27 / 16%);
+}
+
+.workspace-menu-label {
+  display: block;
+  padding: 6px 9px 8px;
+  color: #a47f69;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.workspace-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 35px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #604a3d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+}
+
+.workspace-menu-item > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-menu-item:hover,
+.workspace-menu-item[aria-current="true"] {
+  background: #fff0e4;
+  color: #8d4e31;
+}
+
+.workspace-menu-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: #f0e2d6;
+}
+
+.workspace-menu-item.workspace-menu-delete {
+  color: #a34532;
+}
+
+.workspace-menu-item.workspace-menu-delete:hover {
+  background: #fff1ed;
+}
+
+.workspace-switcher-error {
+  display: grid;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 8px;
+  border: 1px solid #efc7bc;
+  border-radius: 5px;
+  background: #fff5f1;
+  color: #a34532;
+  font-size: 9px;
+}
+
+.workspace-switcher-error button {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8d4e31;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.workspace-modal {
+  width: min(440px, 100%);
+  overflow: hidden;
+  border: 1px solid #f0d7c2;
+  border-radius: 8px;
+  background: var(--paper-soft);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 19%);
+}
+
+.workspace-modal form {
+  display: grid;
+  gap: 8px;
+  padding: 17px 22px 22px;
+}
+
+.workspace-modal form > label {
+  color: #55514a;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.workspace-modal input {
+  width: 100%;
+  min-height: 37px;
+  padding: 8px 10px;
+  border: 1px solid #e4e0d8;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #36332e;
+  font: inherit;
+  font-size: 11px;
+}
+
+.workspace-modal input:focus-visible {
+  border-color: #e77a3b;
+  outline: 2px solid rgb(239 133 65 / 18%);
+  outline-offset: 1px;
+}
+
+.workspace-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.workspace-modal-actions .primary-button,
+.workspace-modal-actions .subtle-button {
+  min-height: 34px;
+  margin: 0;
 }
 
 .nav-section-label {
@@ -334,6 +495,45 @@ a:focus-visible {
   color: #f0ede7;
   font-size: 10px;
   font-weight: 600;
+}
+
+.profile-name-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-name-button:hover strong {
+  color: #b65d36;
+}
+
+.profile-name-form {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-name-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #e8c1a8;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #604a3d;
+  font: inherit;
+  font-size: 10px;
+}
+
+.profile-name-error {
+  color: #a33b2c;
+  font-size: 8px;
 }
 
 .profile-copy > span {
@@ -1242,7 +1442,7 @@ a:focus-visible {
 .brand-card-logo.generated-asset-preview {
   position: absolute;
   z-index: 1;
-  inset: 9px;
+  inset: 32px 16px 48px;
   width: auto;
   height: auto;
   aspect-ratio: auto;
@@ -1465,6 +1665,12 @@ a:focus-visible {
   backdrop-filter: blur(3px);
 }
 
+.workspace-modal-backdrop {
+  background: rgb(25 23 21 / 42%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 .brand-modal {
   width: min(720px, 100%);
   max-height: min(88vh, 840px);
@@ -1558,7 +1764,8 @@ a:focus-visible {
 .form-grid input:focus,
 .form-grid select:focus,
 .form-grid textarea:focus,
-.logo-generator-fields textarea:focus {
+.logo-generator-fields textarea:focus,
+.logo-generation-options select:focus {
   border-color: #81868b;
   box-shadow: 0 0 0 2px rgb(205 144 120 / 15%);
 }
@@ -1698,8 +1905,8 @@ a:focus-visible {
 
 .logo-generator-fields {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 13px;
+  grid-template-columns: 1fr;
+  gap: 12px;
   margin-top: 12px;
   padding: 12px;
   border: 1px solid #e1e3e5;
@@ -1707,54 +1914,59 @@ a:focus-visible {
   background: #f3f4f5;
 }
 
-.logo-generator-fields fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.logo-generation-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
 }
 
-.logo-generator-fields legend {
-  margin-bottom: 7px;
+.logo-generation-options > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   color: #55514a;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
 }
 
-.logo-style-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+.logo-generator-fields .image-model-selector {
+  width: 100%;
 }
 
-.logo-style-option input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.logo-style-option span {
-  display: grid;
-  min-height: 30px;
-  place-items: center;
-  border: 1px solid #d9dbde;
-  border-radius: 4px;
-  background: #fff;
-  color: #82796f;
-  cursor: pointer;
+.logo-generator-fields .image-model-selector > label {
+  color: #55514a;
   font-size: 9px;
+  font-weight: 600;
 }
 
-.logo-style-option input:checked + span {
-  border-color: #858a8f;
-  background-image: var(--liquid-sheen), var(--liquid-gradient);
-  color: #fff;
+.logo-generation-options select {
+  width: 100%;
+  min-height: 35px;
+  padding: 8px 9px;
+  border: 1px solid #e4e0d8;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #36332e;
+  font: inherit;
+  font-size: 10px;
 }
 
-.logo-style-option input:focus-visible + span {
-  outline: 2px solid var(--accent-ink);
+.logo-generation-options select:focus-visible {
+  outline: 2px solid #e77a3b;
   outline-offset: 2px;
+}
+
+.logo-generator-fields .image-model-selector select {
+  min-height: 35px;
+  border-color: #e4e0d8;
+  background: #fffefa;
+  color: #36332e;
+  font-size: 10px;
+}
+
+.logo-generator-fields .primary-button {
+  justify-self: start;
+  margin: 0;
 }
 
 .modal-footer {
@@ -2519,11 +2731,10 @@ a:focus-visible {
 .image-lightbox-image {
   position: relative;
   z-index: 1;
-  width: min(100%, 1100px);
-  height: min(100%, 90vh);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
+  display: block;
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
   cursor: default;
 }
 
@@ -2936,6 +3147,12 @@ a:focus-visible {
   background: rgb(255 255 255 / 73%);
 }
 
+.sidebar .workspace-switcher:hover,
+.sidebar .workspace-switcher[aria-expanded="true"] {
+  border-color: #e8c1a8;
+  background: #fffaf5;
+}
+
 .sidebar .workspace-copy .eyebrow {
   color: #a47f69;
 }
@@ -3195,8 +3412,7 @@ a:focus-visible {
 .format-option input:checked + span,
 .wizard-step.current .wizard-number,
 .wizard-step.complete .wizard-number,
-.checkbox-row input:checked + .custom-checkbox,
-.logo-style-option input:checked + span {
+.checkbox-row input:checked + .custom-checkbox {
   background-image: var(--liquid-sheen), var(--liquid-gradient);
 }
 
@@ -3558,6 +3774,10 @@ a:focus-visible {
   }
 
   .logo-generator-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .logo-generation-options {
     grid-template-columns: 1fr;
   }
 
@@ -4198,24 +4418,6 @@ a:focus-visible {
   width: min(100%, 300px);
 }
 
-.brand-logo-model {
-  display: flex;
-  max-width: 370px;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-}
-
-.brand-logo-model > span {
-  color: #806b5d;
-  font-size: 8px;
-  text-align: right;
-}
-
-.brand-logo-model .image-model-selector {
-  width: min(100%, 300px);
-}
-
 @media (max-width: 760px) {
   .generation-mode-options {
     width: 100%;
@@ -4234,19 +4436,6 @@ a:focus-visible {
   .brand-image-model {
     width: 100%;
     align-items: flex-start;
-  }
-
-  .brand-logo-model {
-    width: 100%;
-    align-items: flex-start;
-  }
-
-  .brand-logo-model > span {
-    text-align: left;
-  }
-
-  .brand-logo-model .image-model-selector {
-    width: 100%;
   }
 
   .brand-image-model .image-model-selector {

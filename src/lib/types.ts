@@ -1,7 +1,16 @@
 import type { CampaignImageCategory, CampaignImageFormat } from "@/lib/image-options";
 
+export type Workspace = {
+  id: string;
+  name: string;
+  isCurrent: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type Brand = {
   id: string;
+  workspaceId: string;
   name: string;
   secondaryName: string;
   slogan: string;
@@ -63,6 +72,7 @@ export type CampaignStrategy = {
 
 export type CampaignAsset = {
   id: string;
+  workspaceId: string;
   campaignId?: string;
   brandId: string;
   blob: Blob;
@@ -75,6 +85,7 @@ export type CampaignAsset = {
 
 export type Campaign = {
   id: string;
+  workspaceId: string;
   brandId: string;
   brief: CampaignBrief;
   strategy: CampaignStrategy;

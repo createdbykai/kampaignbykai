@@ -38,8 +38,10 @@ async function imageError(response: Response, fallback: string) {
 
 export function ImageGenerationStudio({
   onCreateBrand,
+  workspaceId,
 }: {
   onCreateBrand: () => void;
+  workspaceId: string;
 }) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState("");
@@ -59,13 +61,14 @@ export function ImageGenerationStudio({
   useEffect(() => {
     let active = true;
     void database.brands
-      .orderBy("updatedAt")
-      .reverse()
+      .where("workspaceId")
+      .equals(workspaceId)
       .toArray()
       .then((savedBrands) => {
         if (!active) return;
-        setBrands(savedBrands);
-        setSelectedBrandId((current) => current || savedBrands[0]?.id || "");
+        const sortedBrands = savedBrands.sort((a, b) => b.updatedAt - a.updatedAt);
+        setBrands(sortedBrands);
+        setSelectedBrandId((current) => current || sortedBrands[0]?.id || "");
       })
       .catch(() => {
         if (active) setError("Your brands could not be loaded. Please try again.");
@@ -76,16 +79,17 @@ export function ImageGenerationStudio({
     return () => {
       active = false;
     };
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!selectedBrandId) return;
     let active = true;
     void database.assets
-      .where("brandId")
-      .equals(selectedBrandId)
-      .reverse()
+      .where("workspaceId")
+      .equals(workspaceId)
+      .filter((asset) => asset.brandId === selectedBrandId)
       .toArray()
+      .then((savedAssets) => savedAssets.sort((a, b) => b.createdAt - a.createdAt))
       .then((savedAssets) => {
         if (active) {
           setStandaloneAssets(savedAssets.filter(
@@ -99,7 +103,7 @@ export function ImageGenerationStudio({
     return () => {
       active = false;
     };
-  }, [selectedBrandId]);
+  }, [selectedBrandId, workspaceId]);
 
   const selectedBrand = brands.find((brand) => brand.id === selectedBrandId);
   const visibleStandaloneAssets = standaloneAssets.filter(
@@ -183,6 +187,7 @@ export function ImageGenerationStudio({
       } else {
         const asset: CampaignAsset = {
           id: crypto.randomUUID(),
+          workspaceId,
           brandId: selectedBrand.id,
           blob,
           prompt,

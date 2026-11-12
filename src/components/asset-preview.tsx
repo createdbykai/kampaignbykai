@@ -64,12 +64,12 @@ export function BlobPreview({
           >
             <X aria-hidden="true" size={20} />
           </button>
-          <div
+          <img
+            alt={label}
             aria-label={label}
             className="image-lightbox-image"
             onClick={(event) => event.stopPropagation()}
-            role="img"
-            style={{ backgroundImage: `url("${preview}")` }}
+            src={preview}
           />
         </div>
       )}

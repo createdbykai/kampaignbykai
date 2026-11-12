@@ -13,6 +13,12 @@ app is built with Next.js, React, TypeScript, Tailwind CSS, and IndexedDB.
 The app's brand profiles, campaign drafts, and generated assets are designed to
 stay in the current browser using IndexedDB.
 
+Use the workspace switcher in the sidebar to create, rename, or switch between
+workspaces. Each workspace has separate brands, campaigns, and generated assets;
+existing data is kept in the original **Kai's workspace**. You can delete a
+workspace only when more than one exists, and deleting it permanently removes
+its data.
+
 ## Create your first campaign
 
 1. Add your clothing brand from **My Brands**. Include a brand description to

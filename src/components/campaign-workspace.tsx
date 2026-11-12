@@ -52,11 +52,13 @@ export function CampaignWorkspace({
 
   useEffect(() => {
     void Promise.all([
-      database.brands.get(campaign.brandId),
-      database.assets.where("campaignId").equals(campaign.id).toArray(),
+      database.brands.where("workspaceId").equals(campaign.workspaceId)
+        .filter((brand) => brand.id === campaign.brandId).first(),
+      database.assets.where("workspaceId").equals(campaign.workspaceId)
+        .filter((asset) => asset.campaignId === campaign.id).toArray(),
     ])
       .then(([brand, savedAssets]) => {
-        if (brand) {
+        if (brand?.workspaceId === campaign.workspaceId) {
           setBrandName(brand.name);
           setBrandContext({
             name: brand.name,
@@ -75,7 +77,7 @@ export function CampaignWorkspace({
         setAssets(savedAssets.sort((a, b) => b.createdAt - a.createdAt));
       })
       .catch(() => setError("Campaign details could not be loaded."));
-  }, [campaign.brandId, campaign.id]);
+  }, [campaign.brandId, campaign.id, campaign.workspaceId]);
 
   async function generateImages() {
     if (!brandContext) {
@@ -119,6 +121,7 @@ export function CampaignWorkspace({
         const blob = await response.blob();
         const asset: CampaignAsset = {
           id: crypto.randomUUID(),
+          workspaceId: campaign.workspaceId,
           campaignId: campaign.id,
           brandId: campaign.brandId,
           blob,

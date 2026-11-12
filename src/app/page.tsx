@@ -5,8 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bell,
-  ChevronDown,
-  CircleHelp,
+  Check,
   Clapperboard,
   Command,
   FolderOpen,
@@ -16,18 +15,21 @@ import {
   Layers3,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   Settings2,
   Sparkles,
   WandSparkles,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { BrandManager } from "@/components/brand-manager";
 import { AssetPreview } from "@/components/asset-preview";
 import { CampaignBuilder } from "@/components/campaign-builder";
 import { CampaignWorkspace } from "@/components/campaign-workspace";
 import { ImageGenerationStudio } from "@/components/image-generation-studio";
 import { StudioLibrary } from "@/components/studio-library";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { database } from "@/lib/database";
 import type { CampaignTemplate } from "@/lib/templates";
 import type { Campaign, CampaignAsset } from "@/lib/types";
@@ -38,8 +40,8 @@ type RecentProject = {
   asset?: CampaignAsset;
 };
 
-const userName = "Kai";
-const userInitial = userName.trim().charAt(0).toUpperCase() || "K";
+const defaultUserName = "Kai";
+const userNameStorageKey = "kampaign-profile-name";
 
 const navigation = [
   { label: "Dashboard", icon: Grid2X2 },
@@ -56,9 +58,15 @@ export default function Home() {
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplate | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [userName, setUserName] = useState(defaultUserName);
+  const [userNameDraft, setUserNameDraft] = useState(defaultUserName);
+  const [isEditingUserName, setIsEditingUserName] = useState(false);
+  const [userNameError, setUserNameError] = useState("");
   const [studioCounts, setStudioCounts] = useState({ campaigns: 0, brands: 0, assets: 0 });
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
   const [dashboardError, setDashboardError] = useState("");
+  const userInitial = userName.trim().charAt(0).toUpperCase() || "K";
 
   function startBlankCampaign() {
     setSelectedTemplate(null);
@@ -67,27 +75,74 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (activePage !== "Dashboard") return;
+    const timeout = window.setTimeout(() => {
+      try {
+        const savedName = window.localStorage.getItem(userNameStorageKey)?.trim();
+        if (savedName) setUserName(savedName);
+      } catch {
+        setUserNameError("Your saved name could not be loaded.");
+      }
+    });
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  function startEditingUserName() {
+    setUserNameDraft(userName);
+    setUserNameError("");
+    setIsEditingUserName(true);
+  }
+
+  function saveUserName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextName = userNameDraft.trim();
+    if (!nextName) {
+      setUserNameError("Enter a name to continue.");
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(userNameStorageKey, nextName);
+      setUserName(nextName);
+      setIsEditingUserName(false);
+      setUserNameError("");
+    } catch {
+      setUserNameError("Your name could not be saved. Please try again.");
+    }
+  }
+
+  const handleWorkspaceChange = useCallback((nextWorkspaceId: string) => {
+    setWorkspaceId(nextWorkspaceId);
+    setActiveCampaign(null);
+    setSelectedTemplate(null);
+    setActivePage("Dashboard");
+    setStudioCounts({ campaigns: 0, brands: 0, assets: 0 });
+    setRecentProjects([]);
+    setDashboardError("");
+  }, []);
+
+  useEffect(() => {
+    if (activePage !== "Dashboard" || !workspaceId) return;
     let active = true;
     void Promise.all([
-      database.campaigns.count(),
-      database.brands.count(),
-      database.assets.toArray(),
-      database.campaigns.orderBy("createdAt").reverse().limit(2).toArray(),
-      database.brands.toArray(),
-    ])
-      .then(async ([campaignCount, brandCount, assets, campaigns, brands]) => {
+      database.campaigns.where("workspaceId").equals(workspaceId).toArray(),
+      database.brands.where("workspaceId").equals(workspaceId).toArray(),
+      database.assets.where("workspaceId").equals(workspaceId).toArray(),
+    ]).then(async ([allCampaigns, brands, assets]) => {
         if (!active) return;
+        const campaigns = allCampaigns
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, 2);
         const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
         const recentAssets = await Promise.all(
           campaigns.map((campaign) =>
-            database.assets.where("campaignId").equals(campaign.id).first(),
+            database.assets.where("workspaceId").equals(workspaceId)
+              .filter((asset) => asset.campaignId === campaign.id).first(),
           ),
         );
         if (!active) return;
         setStudioCounts({
-          campaigns: campaignCount,
-          brands: brandCount,
+          campaigns: allCampaigns.length,
+          brands: brands.length,
           assets: assets.filter((asset) => asset.kind !== "logo").length +
             brands.filter((brand) => brand.logo).length,
         });
@@ -104,7 +159,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [activePage]);
+  }, [activePage, workspaceId]);
 
   return (
     <main className="app-shell">
@@ -122,14 +177,7 @@ export default function Home() {
           </span>
         </a>
 
-        <div className="workspace-switcher">
-          <div className="workspace-avatar">{userInitial}</div>
-          <div className="workspace-copy">
-            <span className="eyebrow">YOUR STUDIO</span>
-            <strong>{userName}&apos;s workspace</strong>
-          </div>
-          <ChevronDown aria-hidden="true" size={15} />
-        </div>
+        <WorkspaceSwitcher onWorkspaceChange={handleWorkspaceChange} />
 
         <div className="nav-section-label">MENU</div>
         <nav aria-label="Main navigation" className="primary-nav">
@@ -190,13 +238,47 @@ export default function Home() {
           </button>
           <div className="profile-row">
             <div className="profile-avatar">{userInitial}</div>
-            <div className="profile-copy">
-              <strong>{userName}</strong>
-              <span>Creative director</span>
-            </div>
-            <button aria-label="Open profile menu" className="icon-button" type="button">
-              <CircleHelp aria-hidden="true" size={17} />
-            </button>
+            {isEditingUserName ? (
+              <form className="profile-name-form" id="profile-name-form" onSubmit={saveUserName}>
+                <input
+                  aria-label="Your name"
+                  autoFocus
+                  maxLength={40}
+                  onChange={(event) => setUserNameDraft(event.target.value)}
+                  value={userNameDraft}
+                />
+                {userNameError && <span className="profile-name-error" role="alert">{userNameError}</span>}
+              </form>
+            ) : (
+              <div className="profile-copy">
+                <button className="profile-name-button" onClick={startEditingUserName} type="button">
+                  <strong>{userName}</strong>
+                </button>
+                <span>Creative director</span>
+              </div>
+            )}
+            {isEditingUserName ? (
+              <>
+                <button aria-label="Save name" className="icon-button" form="profile-name-form" type="submit">
+                  <Check aria-hidden="true" size={17} />
+                </button>
+                <button
+                  aria-label="Cancel name change"
+                  className="icon-button"
+                  onClick={() => {
+                    setIsEditingUserName(false);
+                    setUserNameError("");
+                  }}
+                  type="button"
+                >
+                  <X aria-hidden="true" size={17} />
+                </button>
+              </>
+            ) : (
+              <button aria-label="Edit your name" className="icon-button" onClick={startEditingUserName} type="button">
+                <Pencil aria-hidden="true" size={16} />
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -235,7 +317,9 @@ export default function Home() {
           </div>
         </header>
 
-        {activePage === "Dashboard" ? (
+        {!workspaceId ? (
+          <div className="empty-panel workspace-loading">Loading your workspace…</div>
+        ) : activePage === "Dashboard" ? (
           <div className="dashboard-content">
             <div className="welcome-row">
               <div>
@@ -413,13 +497,19 @@ export default function Home() {
             </div>
           </div>
         ) : activePage === "My Brands" ? (
-          <BrandManager />
+          <BrandManager key={workspaceId} workspaceId={workspaceId} />
         ) : activePage === "Image Generation" ? (
-          <ImageGenerationStudio onCreateBrand={() => setActivePage("My Brands")} />
+          <ImageGenerationStudio
+            key={workspaceId}
+            onCreateBrand={() => setActivePage("My Brands")}
+            workspaceId={workspaceId}
+          />
         ) : activePage === "Create campaign" ? (
           <CampaignBuilder
+            key={workspaceId}
             onCreateBrand={() => setActivePage("My Brands")}
             template={selectedTemplate}
+            workspaceId={workspaceId}
             onCreated={(campaign) => {
               setActiveCampaign(campaign);
               setActivePage("Campaign workspace");
@@ -427,6 +517,7 @@ export default function Home() {
           />
         ) : activePage === "Campaign workspace" && activeCampaign ? (
           <CampaignWorkspace
+            key={`${workspaceId}:${activeCampaign.id}`}
             campaign={activeCampaign}
             onBack={() => setActivePage("Dashboard")}
             onCampaignChange={setActiveCampaign}
@@ -438,7 +529,9 @@ export default function Home() {
           activePage === "Settings"
         ) ? (
           <StudioLibrary
+            key={`${workspaceId}:${activePage}`}
             page={activePage}
+            workspaceId={workspaceId}
             onOpenCampaign={(campaign) => {
               setActiveCampaign(campaign);
               setActivePage("Campaign workspace");
